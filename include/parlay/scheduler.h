@@ -19,6 +19,7 @@
 // }
 //
 
+
 #ifndef PARLAY_SCHEDULER_H_
 #define PARLAY_SCHEDULER_H_
 
@@ -36,10 +37,22 @@
 #include <thread>
 #include <type_traits>    // IWYU pragma: keep
 #include <vector>
+#include <atomic>
 
 #include "internal/work_stealing_job.h"
+#include "papi/papi_util_impl.h"
+
+// IWYU pragma: no_include <bits/this_thread_sleep.h>
 
 namespace parlay {
+
+atomic<bool> deactivated = false;
+
+void deactivate_scheduling(bool val) {
+  #ifdef SCHEDULER_DEACTIVATE
+  deactivated = val;
+  #endif
+}
 
 // Deque from Arora, Blumofe, and Plaxton (SPAA, 1998).
 template <typename Job>
@@ -228,12 +241,28 @@ struct scheduler {
   std::vector<std::thread> spawned_threads;
   std::atomic<int> finished_flag;
 
+  void sleep_wait() {
+    #ifdef SCHEDULER_DEACTIVATE
+    while (deactivated) {
+      std::this_thread::sleep_for(std::chrono::nanoseconds(num_deques * 100));
+    }
+    #endif
+  }
+
   // Start an individual scheduler task.  Runs until finished().
   template <typename F>
   void start(F finished) {
     while (true) {
+      // sleep_wait();
       Job* job = get_job(finished);
       if (!job) return;
+      // khb
+      #ifdef USE_PAPI
+      if (papi_check_counters(worker_id())) {
+        // printf("Thread %d switch.\n", worker_id());
+      }
+      #endif
+      // printf("Thread %d start job.\n", thread_id);
       (*job)();
     }
   }
@@ -253,12 +282,22 @@ struct scheduler {
     if (job) return job;
     size_t id = worker_id();
     while (true) {
+      // khb
+      #ifdef USE_PAPI
+      if (papi_check_counters(worker_id())) {
+        // printf("Thread %d switch.\n", worker_id());
+      }
+      #endif
+      sleep_wait();
+
       // By coupon collector's problem, this should touch all.
       for (int i = 0; i <= num_deques * 100; i++) {
         if (finished()) return nullptr;
+        if (deactivated) break;
         job = try_steal(id);
         if (job) return job;
       }
+
       // If haven't found anything, take a breather.
       std::this_thread::sleep_for(std::chrono::nanoseconds(num_deques * 100));
     }
