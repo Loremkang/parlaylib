@@ -46,7 +46,7 @@
 
 namespace parlay {
 
-atomic<bool> deactivated = false;
+std::atomic<bool> deactivated = false;
 
 void deactivate_scheduling(bool val) {
   #ifdef SCHEDULER_DEACTIVATE
