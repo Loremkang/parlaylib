@@ -4,6 +4,7 @@
 #include <string>
 #include <cassert>
 #include <thread>
+#include <iomanip>
 
 // #include "parlay/scheduler.h"
 // #include "parlay/parallel.h"
@@ -258,6 +259,7 @@ void papi_print_counters(long long num_operations) {
             std::cout << all_cpu_counters_strings[i] << "=-1" << std::endl;
             continue;
         }
+        std::cout << std::setprecision(5);
         std::cout << all_cpu_counters_strings[i] << "="
                   << ((double)counter_values[j] / num_operations) << std::endl;
         // printf("%s=%.3f\n", cpu_counter(c),
